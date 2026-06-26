@@ -15,62 +15,106 @@ const PAGES = [
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// Busca um seletor em todos os frames da página
-async function findInFrames(page, selector, timeout = 60000) {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
+async function typeInFrame(page, selector, value) {
+  // Tenta na página principal primeiro
+  let target = await page.$(selector);
+  if (target) {
+    await target.click({ clickCount: 3 });
+    await target.type(value, { delay: 80 });
+    return page;
+  }
+  // Tenta em cada frame
+  for (const frame of page.frames()) {
+    try {
+      target = await frame.$(selector);
+      if (target) {
+        await target.click({ clickCount: 3 });
+        await target.type(value, { delay: 80 });
+        return frame;
+      }
+    } catch {}
+  }
+  // Último recurso: injeta via JavaScript em todos os frames
+  for (const frame of page.frames()) {
+    try {
+      const found = await frame.evaluate((sel, val) => {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.focus();
+          el.value = val;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      }, selector, value);
+      if (found) {
+        console.log(`  Digitado via JS em frame: ${frame.url()}`);
+        return frame;
+      }
+    } catch {}
+  }
+  throw new Error(`Não conseguiu digitar em: ${selector}`);
+}
+
+async function clickInFrame(page, selectors) {
+  for (const sel of selectors) {
+    // Tenta na página principal
+    const el = await page.$(sel);
+    if (el) { await el.click(); return; }
+    // Tenta nos frames
     for (const frame of page.frames()) {
       try {
-        const el = await frame.$(selector);
-        if (el) return { el, frame };
+        const el2 = await frame.$(sel);
+        if (el2) { await el2.click(); return; }
       } catch {}
     }
-    await sleep(500);
+    // Via JS
+    for (const frame of page.frames()) {
+      try {
+        const found = await frame.evaluate((s) => {
+          const el = document.querySelector(s);
+          if (el) { el.click(); return true; }
+          return false;
+        }, sel);
+        if (found) return;
+      } catch {}
+    }
   }
-  throw new Error(`Seletor não encontrado em nenhum frame: ${selector}`);
 }
 
 async function login(page) {
   console.log('Abrindo Power BI...');
   await page.goto('https://app.powerbi.com', { waitUntil: 'networkidle2', timeout: 120000 });
-  await sleep(3000);
+  await sleep(5000);
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug_s1.png') });
+  console.log(`Frames encontrados: ${page.frames().length}`);
+  page.frames().forEach((f, i) => console.log(`  Frame ${i}: ${f.url()}`));
 
-  // STEP 1: campo email (pode estar em iframe)
-  console.log('Buscando campo email em todos os frames...');
-  const { el: emailEl, frame: f1 } = await findInFrames(page, 'input[type="email"]');
-  await emailEl.click({ clickCount: 3 });
-  await emailEl.type(USERNAME, { delay: 80 });
-  console.log('Email digitado.');
-
-  // Clica em Submit no mesmo frame
-  const submitEl = await f1.$('input[type="submit"], button[type="submit"]');
-  if (submitEl) await submitEl.click();
-  else await emailEl.press('Enter');
+  // STEP 1: Email
+  console.log('Digitando email...');
+  await typeInFrame(page, 'input[type="email"]', USERNAME);
+  await sleep(500);
+  await clickInFrame(page, ['input[type="submit"]', 'button[type="submit"]', '.submitBtn', '[data-bi-id="submit"]']);
   await sleep(5000);
   await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug_s2.png') });
+  console.log('Após email. URL:', page.url());
 
-  // STEP 2: campo senha
-  console.log('Buscando campo senha em todos os frames...');
-  const { el: passEl, frame: f2 } = await findInFrames(page, 'input[name="passwd"]');
-  await passEl.click({ clickCount: 3 });
-  await passEl.type(PASSWORD, { delay: 80 });
-  console.log('Senha digitada.');
-
-  const signinEl = await f2.$('#idSIButton9, input[type="submit"], button[type="submit"]');
-  if (signinEl) await signinEl.click();
-  else await passEl.press('Enter');
+  // STEP 2: Senha
+  console.log('Digitando senha...');
+  await typeInFrame(page, 'input[name="passwd"]', PASSWORD);
+  await sleep(500);
+  await clickInFrame(page, ['#idSIButton9', 'input[type="submit"]', 'button[type="submit"]']);
   await sleep(5000);
   await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug_s3.png') });
 
   // STEP 3: Stay signed in → No
   try {
-    const { el: noBtn } = await findInFrames(page, '#idBtn_Back', 10000);
-    await noBtn.click();
+    await clickInFrame(page, ['#idBtn_Back']);
     console.log('Clicou em No.');
     await sleep(3000);
-  } catch { console.log('Sem Stay signed in.'); }
+  } catch {}
 
   console.log('Aguardando Power BI (20s)...');
   await sleep(20000);
@@ -79,7 +123,7 @@ async function login(page) {
 }
 
 async function capturar(page, info) {
-  console.log(`\nPagina ${info.num}: abrindo embed...`);
+  console.log(`\nPagina ${info.num}: abrindo...`);
   await page.goto(info.url, { waitUntil: 'networkidle2', timeout: 120000 });
   await sleep(20000);
   const out = path.join(OUTPUT_DIR, `pagina${info.num}.png`);
