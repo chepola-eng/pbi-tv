@@ -1,0 +1,10 @@
+{
+  "name": "pbi-tv",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node export_pbi.js"
+  },
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  }
+}
