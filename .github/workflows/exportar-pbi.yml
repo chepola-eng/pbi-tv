@@ -30,7 +30,7 @@ jobs:
         env:
           PBI_USERNAME: ${{ secrets.PBI_USERNAME }}
           PBI_PASSWORD: ${{ secrets.PBI_PASSWORD }}
-        run: node export_pbi.js
+        run: node capturar.js
 
       - name: Commitar e publicar imagens
         run: |
