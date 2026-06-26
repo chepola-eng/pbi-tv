@@ -86,10 +86,14 @@ async function clickInFrame(page, selectors) {
 async function login(page) {
   console.log('Abrindo Power BI...');
   await page.goto('https://app.powerbi.com', { waitUntil: 'networkidle2', timeout: 120000 });
-  await sleep(5000);
+  await sleep(15000);
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug_s1.png') });
   console.log(`Frames encontrados: ${page.frames().length}`);
+  // Aguarda frame de login aparecer
+  await sleep(5000);
+  console.log(`Frames após espera extra: ${page.frames().length}`);
+  page.frames().forEach((f, i) => console.log(`  Frame ${i}: ${f.url()}`));
   page.frames().forEach((f, i) => console.log(`  Frame ${i}: ${f.url()}`));
 
   // STEP 1: Email
