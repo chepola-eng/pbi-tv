@@ -2,9 +2,10 @@
   "name": "pbi-tv",
   "version": "1.0.0",
   "scripts": {
-    "start": "node export_pbi.js"
+    "start": "node capturar.js"
   },
   "dependencies": {
-    "puppeteer": "24.15.0"
+    "puppeteer": "24.15.0",
+    "sharp": "^0.33.0"
   }
 }
