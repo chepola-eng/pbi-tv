@@ -16,73 +16,114 @@ const PAGES = [
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function login(page) {
-  console.log('Abrindo Microsoft login...');
-  await page.goto('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=871c010f-5e61-4fb1-83ac-98610a7e9110&response_type=code&redirect_uri=https://app.powerbi.com/&scope=openid+profile', 
-    { waitUntil: 'domcontentloaded', timeout: 120000 });
-  await sleep(4000);
-  console.log('URL:', page.url());
+  console.log('Abrindo Power BI...');
+  await page.goto('https://app.powerbi.com', { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await sleep(5000);
+  console.log('URL inicial:', page.url());
 
-  console.log('Aguardando campo email...');
-  await page.waitForSelector('input[name="loginfmt"]', { timeout: 60000 });
-  await page.type('input[name="loginfmt"]', USERNAME, { delay: 80 });
-  await sleep(500);
-  await page.keyboard.press('Enter');
-  await sleep(3000);
-  console.log('Email enviado. URL:', page.url());
-
-  console.log('Aguardando campo senha...');
-  await page.waitForSelector('input[name="passwd"]', { timeout: 60000 });
+  // PASSO 1: Tela do Power BI com "Enter email"
+  console.log('Aguardando campo de email do Power BI...');
+  await page.waitForSelector('input[type="email"], input[name="loginfmt"]', { timeout: 60000 });
   await sleep(1000);
-  await page.type('input[name="passwd"]', PASSWORD, { delay: 80 });
+
+  const emailInput = await page.$('input[type="email"]') || await page.$('input[name="loginfmt"]');
+  await emailInput.click();
+  await emailInput.type(USERNAME, { delay: 80 });
+  console.log('Email digitado:', USERNAME);
   await sleep(500);
-  await page.keyboard.press('Enter');
-  await sleep(4000);
-  console.log('Senha enviada. URL:', page.url());
 
-  // "Manter conectado?" → Não
+  // Clica no botão Submit/Next
+  const submitBtn = await page.$('input[type="submit"], button[type="submit"], .btn-primary, #submitBtn');
+  if (submitBtn) {
+    await submitBtn.click();
+    console.log('Clicou em Submit');
+  } else {
+    await page.keyboard.press('Enter');
+    console.log('Pressionou Enter');
+  }
+  await sleep(5000);
+  console.log('URL após email:', page.url());
+
+  // PASSO 2: Tela de senha da Microsoft
+  console.log('Aguardando campo de senha...');
+  await page.waitForSelector('input[type="password"], input[name="passwd"]', { timeout: 60000 });
+  await sleep(1000);
+
+  const passInput = await page.$('input[name="passwd"]') || await page.$('input[type="password"]');
+  await passInput.click();
+  await passInput.type(PASSWORD, { delay: 80 });
+  console.log('Senha digitada.');
+  await sleep(500);
+
+  const signInBtn = await page.$('input[type="submit"], button[type="submit"], #idSIButton9');
+  if (signInBtn) {
+    await signInBtn.click();
+    console.log('Clicou em Sign In');
+  } else {
+    await page.keyboard.press('Enter');
+  }
+  await sleep(5000);
+  console.log('URL após senha:', page.url());
+
+  // PASSO 3: "Manter conectado?" → Não
   try {
-    await page.waitForSelector('#idBtn_Back', { timeout: 8000 });
-    await page.click('#idBtn_Back');
-    console.log('Clicou em Nao no Manter conectado');
-    await sleep(3000);
-  } catch { console.log('Sem prompt de manter conectado.'); }
+    const naoBtn = await page.$('#idBtn_Back');
+    if (naoBtn) {
+      await naoBtn.click();
+      console.log('Clicou em Não no manter conectado');
+      await sleep(3000);
+    }
+  } catch {}
 
-  console.log('Login OK. URL final:', page.url());
+  // PASSO 4: Aguarda Power BI carregar de verdade
+  console.log('Aguardando Power BI carregar (20s)...');
+  await sleep(20000);
+  console.log('URL final:', page.url());
 }
 
 async function capturar(browser, info) {
   const tab = await browser.newPage();
   await tab.setViewport({ width: 1920, height: 1080 });
-  console.log(`Pagina ${info.num}: abrindo...`);
+  console.log(`\nPagina ${info.num}: abrindo ${info.url}`);
   await tab.goto(info.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  console.log(`Pagina ${info.num}: aguardando 15s para renderizar...`);
-  await sleep(15000);
+  console.log(`Pagina ${info.num}: aguardando 20s para renderizar...`);
+  await sleep(20000);
+
+  // Esconde elementos de UI do Power BI
+  await tab.evaluate(() => {
+    ['[class*="topBar"]','[class*="statusBar"]','[class*="navBar"]','.logoContainer'].forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => el.style.display = 'none');
+    });
+  }).catch(() => {});
+  await sleep(1000);
+
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const out = path.join(OUTPUT_DIR, `pagina${info.num}.png`);
   await tab.screenshot({ path: out });
-  console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size/1024)}KB)`);
+  console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size / 1024)}KB)`);
   await tab.close();
 }
 
 (async () => {
-  console.log('=== Iniciando ===');
+  console.log('=== Iniciando captura ===');
   const browser = await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1920, height: 1080 });
+
   try {
     await login(page);
     for (const info of PAGES) {
       try { await capturar(browser, info); }
-      catch(e) { console.error(`ERRO pagina ${info.num}:`, e.message); }
+      catch (e) { console.error(`ERRO pagina ${info.num}:`, e.message); }
     }
-  } catch(e) {
+  } catch (e) {
     console.error('ERRO GERAL:', e.message);
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug.png') }).catch(()=>{});
-    console.log('Screenshot de debug salvo em docs/debug.png');
+    await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug.png') }).catch(() => {});
+    console.log('Debug screenshot salvo em docs/debug.png');
   } finally {
     await browser.close();
   }
