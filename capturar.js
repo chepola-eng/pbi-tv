@@ -20,60 +20,102 @@ async function login(page) {
   await page.goto('https://app.powerbi.com', { waitUntil: 'networkidle2', timeout: 120000 });
   await sleep(3000);
 
-  // STEP 1: Tela Power BI - Enter email
-  console.log('Aguardando campo de email...');
   await page.waitForSelector('input[type="email"]', { timeout: 60000 });
   await page.type('input[type="email"]', USERNAME, { delay: 80 });
   await sleep(500);
   await page.click('button[type="submit"], input[type="submit"]');
-  console.log('Email enviado.');
   await sleep(4000);
 
-  // STEP 2: Tela Microsoft - Enter password
-  console.log('Aguardando campo de senha...');
   await page.waitForSelector('input[name="passwd"]', { timeout: 60000 });
   await sleep(500);
   await page.type('input[name="passwd"]', PASSWORD, { delay: 80 });
   await sleep(500);
   await page.click('#idSIButton9');
-  console.log('Senha enviada.');
   await sleep(4000);
 
-  // STEP 3: "Stay signed in?" → clicar No
-  console.log('Aguardando Stay signed in...');
   try {
     await page.waitForSelector('#idBtn_Back', { timeout: 10000 });
     await page.click('#idBtn_Back');
-    console.log('Clicou em No no Stay signed in.');
     await sleep(3000);
-  } catch { console.log('Sem prompt Stay signed in.'); }
+  } catch {}
 
-  // STEP 4: Aguarda Power BI home carregar completamente
-  console.log('Aguardando Power BI home (20s)...');
+  console.log('Aguardando Power BI carregar (20s)...');
   await sleep(20000);
-  console.log('Login concluído! URL:', page.url());
+  console.log('Login OK. URL:', page.url());
 }
 
 async function capturar(page, info) {
-  console.log(`\nPagina ${info.num}: navegando para ${info.url}`);
-  // Usa a mesma aba já logada
+  console.log(`\nPagina ${info.num}: navegando...`);
   await page.goto(info.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  console.log(`Pagina ${info.num}: aguardando renderização (25s)...`);
-  await sleep(25000);
+  await sleep(20000);
 
-  // Esconde barras de UI do Power BI
+  // Ativa modo Focus/Fullscreen via URL com parâmetros
+  // Esconde TUDO que não é o visual do dashboard
   await page.evaluate(() => {
-    ['[class*="topBar"]','[class*="statusBar"]','[class*="navBar"]',
-     '[data-testid="nav-bar"]', '.logoContainer', '[class*="header"]'
-    ].forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => el.style.display = 'none');
+    // Remove barras superiores, inferiores e laterais do Power BI
+    const seletores = [
+      '[class*="topBar"]',
+      '[class*="statusBar"]', 
+      '[class*="navBar"]',
+      '[class*="header"]',
+      '[data-testid="nav-bar"]',
+      '.logoContainer',
+      '[class*="breadcrumb"]',
+      '[class*="actionBar"]',
+      '[class*="toolbar"]',
+      // Barra laranja de notificação no topo
+      '[class*="notification"]',
+      '[class*="banner"]',
+    ];
+    seletores.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        el.style.display = 'none';
+        el.style.visibility = 'hidden';
+        el.style.height = '0';
+        el.style.overflow = 'hidden';
+      });
     });
   }).catch(() => {});
+
   await sleep(1000);
+
+  // Encontra o elemento do canvas do relatório para recortar só ele
+  const clip = await page.evaluate(() => {
+    // Tenta encontrar o container principal do relatório
+    const candidates = [
+      '[class*="reportCanvas"]',
+      '[class*="canvasArea"]', 
+      '[class*="reportPage"]',
+      '[class*="visualContainer"]',
+      'iframe[title*="Power BI"]',
+      '.report-canvas',
+    ];
+    for (const sel of candidates) {
+      const el = document.querySelector(sel);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 100 && r.height > 100) {
+          return { x: r.x, y: r.y, width: r.width, height: r.height, sel };
+        }
+      }
+    }
+    return null;
+  });
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const out = path.join(OUTPUT_DIR, `pagina${info.num}.png`);
-  await page.screenshot({ path: out });
+
+  if (clip && clip.width > 100) {
+    console.log(`  Recortando elemento: ${clip.sel} (${Math.round(clip.width)}x${Math.round(clip.height)})`);
+    await page.screenshot({ 
+      path: out, 
+      clip: { x: clip.x, y: clip.y, width: clip.width, height: clip.height }
+    });
+  } else {
+    console.log('  Elemento não encontrado, tirando screenshot completo');
+    await page.screenshot({ path: out });
+  }
+
   console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size / 1024)}KB)`);
 }
 
@@ -86,18 +128,14 @@ async function capturar(page, info) {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   });
 
-  // UMA ÚNICA aba para tudo — login + capturas
   const page = await browser.newPage();
   await page.setViewport({ width: 1920, height: 1080 });
 
   try {
     await login(page);
-
-    // Captura cada página na mesma aba (já logada)
     for (const info of PAGES) {
-      try {
-        await capturar(page, info);
-      } catch (e) {
+      try { await capturar(page, info); }
+      catch (e) {
         console.error(`ERRO pagina ${info.num}:`, e.message);
         await page.screenshot({ path: path.join(OUTPUT_DIR, `debug_pagina${info.num}.png`) }).catch(() => {});
       }
@@ -108,6 +146,5 @@ async function capturar(page, info) {
   } finally {
     await browser.close();
   }
-
   console.log('=== Concluido ===');
 })();
