@@ -100,25 +100,15 @@ async function capturar(browser, info) {
   await tab.goto(info.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await sleep(20000);
 
-  // Esconde barras de interface do Power BI
-  await tab.evaluate(() => {
-    const style = document.createElement('style');
-    style.innerHTML = `
-      [class*="topBar"], [class*="commandBar"], [class*="sideNav"],
-      [class*="leftNav"], [class*="pageNav"], [class*="pagesNavigation"],
-      [class*="statusBar"], [class*="footer"], nav,
-      .pages-navigation-container { 
-        display: none !important; 
-      }
-    `;
-    document.head.appendChild(style);
-  }).catch(() => {});
-
-  await sleep(1000);
-
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const out = path.join(OUTPUT_DIR, `pagina${info.num}.png`);
-  await tab.screenshot({ path: out });
+
+  // Crop exato: recua 186px esquerda, 110px topo, captura 1730x950px
+  await tab.screenshot({
+    path: out,
+    clip: { x: 186, y: 110, width: 1730, height: 950 }
+  });
+
   console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size / 1024)}KB)`);
   await tab.close();
 }
