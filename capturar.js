@@ -7,16 +7,17 @@ const PASSWORD = process.env.PBI_PASSWORD;
 const OUTPUT_DIR = 'docs';
 
 const PAGES = [
-  { num: 1, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83' },
-  { num: 2, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83' },
-  { num: 3, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83' },
-  { num: 4, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83' },
+  { num: 1, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83&pageName=305ed7c6846e3540717e' },
+  { num: 2, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83&pageName=4ef203305c3a8c0e6bcb' },
+  { num: 3, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83&pageName=ad4c9b6fcd6034d4970b' },
+  { num: 4, url: 'https://app.powerbi.com/reportEmbed?reportId=597128d0-5d21-4c67-9aca-8bda42bb6eb9&autoAuth=true&ctid=c84da54b-b54a-4c5c-abe1-f6a8b87afa83&pageName=7c70eece6cf6b670d205' },
 ];
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function login(page) {
-  console.log('Abrindo Power BI...');
+  // Faz login na URL principal do Power BI para estabelecer sessão
+  console.log('Abrindo Power BI para login...');
   await page.goto('https://app.powerbi.com', { waitUntil: 'networkidle2', timeout: 120000 });
   await sleep(3000);
 
@@ -45,77 +46,15 @@ async function login(page) {
 }
 
 async function capturar(page, info) {
-  console.log(`\nPagina ${info.num}: navegando...`);
-  await page.goto(info.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  console.log(`\nPagina ${info.num}: navegando para reportEmbed...`);
+  // Agora navega para a URL embed (sem interface, só o visual)
+  await page.goto(info.url, { waitUntil: 'networkidle2', timeout: 120000 });
+  console.log(`Pagina ${info.num}: aguardando renderização (20s)...`);
   await sleep(20000);
-
-  // Ativa modo Focus/Fullscreen via URL com parâmetros
-  // Esconde TUDO que não é o visual do dashboard
-  await page.evaluate(() => {
-    // Remove barras superiores, inferiores e laterais do Power BI
-    const seletores = [
-      '[class*="topBar"]',
-      '[class*="statusBar"]', 
-      '[class*="navBar"]',
-      '[class*="header"]',
-      '[data-testid="nav-bar"]',
-      '.logoContainer',
-      '[class*="breadcrumb"]',
-      '[class*="actionBar"]',
-      '[class*="toolbar"]',
-      // Barra laranja de notificação no topo
-      '[class*="notification"]',
-      '[class*="banner"]',
-    ];
-    seletores.forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
-        el.style.display = 'none';
-        el.style.visibility = 'hidden';
-        el.style.height = '0';
-        el.style.overflow = 'hidden';
-      });
-    });
-  }).catch(() => {});
-
-  await sleep(1000);
-
-  // Encontra o elemento do canvas do relatório para recortar só ele
-  const clip = await page.evaluate(() => {
-    // Tenta encontrar o container principal do relatório
-    const candidates = [
-      '[class*="reportCanvas"]',
-      '[class*="canvasArea"]', 
-      '[class*="reportPage"]',
-      '[class*="visualContainer"]',
-      'iframe[title*="Power BI"]',
-      '.report-canvas',
-    ];
-    for (const sel of candidates) {
-      const el = document.querySelector(sel);
-      if (el) {
-        const r = el.getBoundingClientRect();
-        if (r.width > 100 && r.height > 100) {
-          return { x: r.x, y: r.y, width: r.width, height: r.height, sel };
-        }
-      }
-    }
-    return null;
-  });
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const out = path.join(OUTPUT_DIR, `pagina${info.num}.png`);
-
-  if (clip && clip.width > 100) {
-    console.log(`  Recortando elemento: ${clip.sel} (${Math.round(clip.width)}x${Math.round(clip.height)})`);
-    await page.screenshot({ 
-      path: out, 
-      clip: { x: clip.x, y: clip.y, width: clip.width, height: clip.height }
-    });
-  } else {
-    console.log('  Elemento não encontrado, tirando screenshot completo');
-    await page.screenshot({ path: out });
-  }
-
+  await page.screenshot({ path: out });
   console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size / 1024)}KB)`);
 }
 
