@@ -21,7 +21,17 @@ async function login(page) {
   await page.goto('https://app.powerbi.com', { waitUntil: 'networkidle2', timeout: 120000 });
   await sleep(3000);
 
-  await page.waitForSelector('input[type="email"]', { timeout: 60000 });
+  // Debug: salva screenshot para ver qual tela apareceu
+  await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug_login.png') }).catch(() => {});
+  
+  // Tenta os dois seletores possíveis
+  const emailSel = await Promise.race([
+    page.waitForSelector('input[type="email"]', { timeout: 30000 }).then(() => 'input[type="email"]').catch(() => null),
+    page.waitForSelector('input[name="loginfmt"]', { timeout: 30000 }).then(() => 'input[name="loginfmt"]').catch(() => null),
+  ]);
+  
+  if (!emailSel) throw new Error('Campo de email não encontrado!');
+  await page.type(emailSel, USERNAME, { delay: 80 });
   await page.type('input[type="email"]', USERNAME, { delay: 80 });
   await sleep(500);
   await page.click('button[type="submit"], input[type="submit"]');
