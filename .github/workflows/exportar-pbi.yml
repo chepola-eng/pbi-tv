@@ -21,10 +21,10 @@ jobs:
           node-version: '20'
 
       - name: Instalar dependências
-        run: npm install
+        run: npm install --prefer-offline
 
       - name: Instalar Chromium
-        run: npx puppeteer browsers install chrome
+        run: npx puppeteer browsers install chrome --skip-download false
 
       - name: Capturar páginas do Power BI
         env:
