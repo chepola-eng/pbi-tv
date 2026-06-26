@@ -33,9 +33,47 @@ def get_token():
     return r.json()["access_token"]
 
 
-def export_page(token, page_id, page_num):
+def get_group_id(token):
+    """Busca o ID real do workspace 'Meu workspace' do usuário"""
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Tenta buscar o relatório diretamente sem group (My Workspace)
+    r = requests.get(
+        f"https://api.powerbi.com/v1.0/myorg/reports/{REPORT_ID}",
+        headers=headers
+    )
+    if r.status_code == 200:
+        print("  Relatório encontrado em 'Meu workspace' (sem group)")
+        return None  # None = My Workspace direto
+    
+    # Se não achou, busca nos grupos
+    r = requests.get("https://api.powerbi.com/v1.0/myorg/groups", headers=headers)
+    r.raise_for_status()
+    groups = r.json().get("value", [])
+    print(f"  Workspaces encontrados: {[g['name'] for g in groups]}")
+    
+    for group in groups:
+        r2 = requests.get(
+            f"https://api.powerbi.com/v1.0/myorg/groups/{group['id']}/reports/{REPORT_ID}",
+            headers=headers
+        )
+        if r2.status_code == 200:
+            print(f"  Relatório encontrado no workspace: {group['name']} ({group['id']})")
+            return group["id"]
+    
+    raise Exception("Relatório não encontrado em nenhum workspace!")
+
+
+def export_page(token, group_id, page_id, page_num):
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    base = f"https://api.powerbi.com/v1.0/myorg/reports/{REPORT_ID}/ExportTo"
+    
+    # URL com ou sem group
+    if group_id:
+        base = f"https://api.powerbi.com/v1.0/myorg/groups/{group_id}/reports/{REPORT_ID}/ExportTo"
+        status_base = f"https://api.powerbi.com/v1.0/myorg/groups/{group_id}/reports/{REPORT_ID}/exports"
+    else:
+        base = f"https://api.powerbi.com/v1.0/myorg/reports/{REPORT_ID}/ExportTo"
+        status_base = f"https://api.powerbi.com/v1.0/myorg/reports/{REPORT_ID}/exports"
 
     # 1. Iniciar exportação
     body = {
@@ -49,8 +87,8 @@ def export_page(token, page_id, page_num):
     export_id = r.json()["id"]
     print(f"  Página {page_num}: exportação iniciada ({export_id})")
 
-    # 2. Aguardar conclusão (polling)
-    status_url = f"https://api.powerbi.com/v1.0/myorg/reports/{REPORT_ID}/exports/{export_id}"
+    # 2. Aguardar conclusão
+    status_url = f"{status_base}/{export_id}"
     for attempt in range(30):
         time.sleep(5)
         r = requests.get(status_url, headers=headers)
@@ -79,9 +117,12 @@ def main():
     print("=== Iniciando exportação ===")
     token = get_token()
     print("Token obtido.")
+    
+    group_id = get_group_id(token)
+    
     for page in PAGES:
         try:
-            export_page(token, page["id"], page["num"])
+            export_page(token, group_id, page["id"], page["num"])
         except Exception as e:
             print(f"ERRO página {page['num']}: {e}")
     print("=== Concluído ===")
