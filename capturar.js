@@ -104,15 +104,18 @@ async function capturar(browser, info) {
   const out = path.join(OUTPUT_DIR, `pagina${info.num}.png`);
 
 // Screenshot com crop
+const sharp = require('sharp');
+
   const tempOut = path.join(OUTPUT_DIR, `temp_pagina${info.num}.png`);
   await tab.screenshot({
     path: tempOut,
     clip: { x: 255, y: 128, width: 1670, height: 917 }
   });
 
-  // Redimensiona para 960px de largura
-  const { execSync } = require('child_process');
-  execSync(`convert "${tempOut}" -resize 960x "${out}"`);
+  await sharp(tempOut)
+    .resize(960)
+    .toFile(out);
+
   fs.unlinkSync(tempOut);
 
   console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size / 1024)}KB)`);
