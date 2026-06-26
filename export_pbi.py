@@ -4,7 +4,7 @@ import time
 
 # ─── CONFIGURAÇÕES ───────────────────────────────────────────
 TENANT_ID  = "c84da54b-b54a-4c5c-abe1-f6a8b87afa83"
-CLIENT_ID  = "04b07795-8542-4c4b-b2a7-4e9a090d2b1b"
+CLIENT_ID  = "b5470816-3417-4208-80cc-926e7eeb3f3d"
 USERNAME   = os.environ["PBI_USERNAME"]
 PASSWORD   = os.environ["PBI_PASSWORD"]
 REPORT_ID  = "597128d0-5d21-4c67-9aca-8bda42bb6eb9"
