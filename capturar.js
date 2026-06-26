@@ -1,51 +1,90 @@
-Run node export_pbi.js
-=== Iniciando captura do Power BI ===
-Fazendo login...
-/home/runner/work/pbi-tv/pbi-tv/node_modules/puppeteer-core/lib/cjs/puppeteer/common/WaitTask.js:50
-            this.#timeoutError = new Errors_js_1.TimeoutError(Waiting failed: ${options.timeout}ms exceeded);
-                                 ^
-TimeoutError: Waiting for selector input[type="email"] failed: Waiting failed: 15000ms exceeded
-    at new WaitTask (/home/runner/work/pbi-tv/pbi-tv/node_modules/puppeteer-core/lib/cjs/puppeteer/common/WaitTask.js:50:34)
-    at IsolatedWorld.waitForFunction (/home/runner/work/pbi-tv/pbi-tv/node_modules/puppeteer-core/lib/cjs/puppeteer/api/Realm.js:25:26)
-    at PQueryHandler.waitFor (/home/runner/work/pbi-tv/pbi-tv/node_modules/puppeteer-core/lib/cjs/puppeteer/common/QueryHandler.js:170:95)
-    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
-    at async CdpFrame.waitForSelector (/home/runner/work/pbi-tv/pbi-tv/node_modules/puppeteer-core/lib/cjs/puppeteer/api/Frame.js:494:21)
-    at async CdpPage.waitForSelector (/home/runner/work/pbi-tv/pbi-tv/node_modules/puppeteer-core/lib/cjs/puppeteer/api/Page.js:1351:20)
-    at async login (/home/runner/work/pbi-tv/pbi-tv/export_pbi.js:25:3)
-    at async /home/runner/work/pbi-tv/pbi-tv/export_pbi.js:90:5
-Node.js v20.20.2
-Error: Process completed with exit code 1.
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
 
-Mostrar menos
-14:57
-O erro referencia a linha 25 do arquivo antigo. O arquivo novo não foi salvo corretamente. Vou gerar um arquivo completamente novo com nome diferente para evitar confusão:
+const USERNAME = process.env.PBI_USERNAME;
+const PASSWORD = process.env.PBI_PASSWORD;
+const OUTPUT_DIR = 'docs';
 
+const PAGES = [
+  { num: 1, url: 'https://app.powerbi.com/groups/me/reports/597128d0-5d21-4c67-9aca-8bda42bb6eb9/305ed7c6846e3540717e' },
+  { num: 2, url: 'https://app.powerbi.com/groups/me/reports/597128d0-5d21-4c67-9aca-8bda42bb6eb9/4ef203305c3a8c0e6bcb' },
+  { num: 3, url: 'https://app.powerbi.com/groups/me/reports/597128d0-5d21-4c67-9aca-8bda42bb6eb9/ad4c9b6fcd6034d4970b' },
+  { num: 4, url: 'https://app.powerbi.com/groups/me/reports/597128d0-5d21-4c67-9aca-8bda42bb6eb9/7c70eece6cf6b670d205' },
+];
 
-Executou um comando, leu um arquivo
-Executou um comando, leu um arquivo
-Agora faça assim no GitHub:
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-1. Delete o arquivo export_pbi.js (lixeira → commit)
+async function login(page) {
+  console.log('Abrindo Microsoft login...');
+  await page.goto('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=871c010f-5e61-4fb1-83ac-98610a7e9110&response_type=code&redirect_uri=https://app.powerbi.com/&scope=openid+profile', 
+    { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await sleep(4000);
+  console.log('URL:', page.url());
 
-2. Crie um novo arquivo chamado capturar.js e cole o conteúdo acima
+  console.log('Aguardando campo email...');
+  await page.waitForSelector('input[name="loginfmt"]', { timeout: 60000 });
+  await page.type('input[name="loginfmt"]', USERNAME, { delay: 80 });
+  await sleep(500);
+  await page.keyboard.press('Enter');
+  await sleep(3000);
+  console.log('Email enviado. URL:', page.url());
 
-3. Atualize o workflow .github/workflows/exportar-pbi.yml — mude apenas a linha do comando de node export_pbi.js para node capturar.js
+  console.log('Aguardando campo senha...');
+  await page.waitForSelector('input[name="passwd"]', { timeout: 60000 });
+  await sleep(1000);
+  await page.type('input[name="passwd"]', PASSWORD, { delay: 80 });
+  await sleep(500);
+  await page.keyboard.press('Enter');
+  await sleep(4000);
+  console.log('Senha enviada. URL:', page.url());
 
-4. Atualize o package.json — confirme que está assim:
+  // "Manter conectado?" → Não
+  try {
+    await page.waitForSelector('#idBtn_Back', { timeout: 8000 });
+    await page.click('#idBtn_Back');
+    console.log('Clicou em Nao no Manter conectado');
+    await sleep(3000);
+  } catch { console.log('Sem prompt de manter conectado.'); }
 
-json
-{
-  "name": "pbi-tv",
-  "version": "1.0.0",
-  "dependencies": {
-    "puppeteer": "24.15.0"
-  }
+  console.log('Login OK. URL final:', page.url());
 }
-Depois Actions → Run workflow!
 
+async function capturar(browser, info) {
+  const tab = await browser.newPage();
+  await tab.setViewport({ width: 1920, height: 1080 });
+  console.log(`Pagina ${info.num}: abrindo...`);
+  await tab.goto(info.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  console.log(`Pagina ${info.num}: aguardando 15s para renderizar...`);
+  await sleep(15000);
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  const out = path.join(OUTPUT_DIR, `pagina${info.num}.png`);
+  await tab.screenshot({ path: out });
+  console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size/1024)}KB)`);
+  await tab.close();
+}
 
-Capturar
-JS 
-
-
-Você usou 75% do seu limite semanal
+(async () => {
+  console.log('=== Iniciando ===');
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+  });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1920, height: 1080 });
+  try {
+    await login(page);
+    for (const info of PAGES) {
+      try { await capturar(browser, info); }
+      catch(e) { console.error(`ERRO pagina ${info.num}:`, e.message); }
+    }
+  } catch(e) {
+    console.error('ERRO GERAL:', e.message);
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    await page.screenshot({ path: path.join(OUTPUT_DIR, 'debug.png') }).catch(()=>{});
+    console.log('Screenshot de debug salvo em docs/debug.png');
+  } finally {
+    await browser.close();
+  }
+  console.log('=== Concluido ===');
+})();
