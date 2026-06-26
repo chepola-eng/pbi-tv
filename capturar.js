@@ -106,7 +106,7 @@ async function capturar(browser, info) {
   // Crop exato: recua 186px esquerda, 110px topo, captura 1730x950px
   await tab.screenshot({
     path: out,
-    clip: { x: 186, y: 110, width: 1730, height: 950 }
+    clip: { x: 255, y: 128, width: 1670, height: 917 }
   });
 
   console.log(`Pagina ${info.num}: salva! (${Math.round(fs.statSync(out).size / 1024)}KB)`);
