@@ -1,37 +1,31 @@
-name: Exportar Power BI para TV
+corrija ela inteira 
 
+name: Exportar Power BI para TV
 on:
   schedule:
    - cron: '*/15 10-21 * * 1-5'
   workflow_dispatch:
-
 jobs:
   exportar:
     runs-on: ubuntu-latest
-
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GIT_TOKEN }}
-
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - name: Instalar dependências
         run: npm install --prefer-offline
-
       - name: Instalar Chromium
         run: npx puppeteer browsers install chrome --skip-download false
-
       - name: Capturar páginas do Power BI
         env:
           PBI_USERNAME: ${{ secrets.PBI_USERNAME }}
           PBI_PASSWORD: ${{ secrets.PBI_PASSWORD }}
         run: node capturar.js
-
 - name: Commitar e publicar imagens
         run: |
           git config user.name "PBI Bot"
