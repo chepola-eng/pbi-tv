@@ -32,12 +32,13 @@ jobs:
           PBI_PASSWORD: ${{ secrets.PBI_PASSWORD }}
         run: node capturar.js
 
-      - name: Commitar e publicar imagens
+- name: Commitar e publicar imagens
         run: |
           git config user.name "PBI Bot"
           git config user.email "bot@pbi-tv.com"
           git add docs/
           git diff --cached --quiet && echo "Sem alterações." || (
             git commit -m "Atualiza dashboard $(date '+%d/%m/%Y %H:%M')"
+            git pull --rebase
             git push
           )
