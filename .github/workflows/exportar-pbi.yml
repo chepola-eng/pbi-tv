@@ -39,6 +39,5 @@ jobs:
           git add docs/
           git diff --cached --quiet && echo "Sem alterações." || (
             git commit -m "Atualiza dashboard $(date '+%d/%m/%Y %H:%M')"
-            git pull --rebase
-            git push
+            git push --force
           )
