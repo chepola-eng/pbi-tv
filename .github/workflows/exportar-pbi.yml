@@ -1,8 +1,6 @@
 name: Exportar Power BI para TV
 
 on:
-  schedule:
-    - cron: '*/15 10-21 * * 1-5'
   workflow_dispatch:
 
 jobs:
